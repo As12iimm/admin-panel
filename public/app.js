@@ -12,17 +12,25 @@ function markInvalid(id, bad=true){ const n=el(id); if(!n) return; n.classList.t
 
 async function api(path, method = 'GET', body, retry = true) {
   setLoading(true);
-  const res = await fetch(`/api/${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {})
-  });
-  if (res.status === 401 && retry && refreshToken) { const ok = await refreshAccessToken(); if (ok) return api(path, method, body, false); }
-  if (!res.ok) { const e = await res.text(); setLoading(false); throw new Error(e); }
-  if (res.status === 204) { setLoading(false); return null; }
-  const data = await res.json();
-  setLoading(false);
-  return data;
+  try {
+    const res = await fetch(`/api/${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    if (res.status === 401 && retry && refreshToken) {
+      const ok = await refreshAccessToken();
+      if (ok) return await api(path, method, body, false);
+    }
+    if (!res.ok) {
+      const e = await res.text();
+      throw new Error(e || 'Request failed');
+    }
+    if (res.status === 204) return null;
+    return await res.json();
+  } finally {
+    setLoading(false);
+  }
 }
 
 async function refreshAccessToken() {
@@ -223,5 +231,11 @@ function bindNav(){ const pages=[...document.querySelectorAll('.page')]; const n
       document.querySelector('.sidebar')?.classList.remove('open'); }; }); }
 
 if (accessToken && refreshToken) {
-  showApp(); bindNav(); api('auth/me').then((u)=>{ currentUser=u; localStorage.setItem('user', JSON.stringify(currentUser)); applyPermissionGuards(); loadAll(); }).catch(()=>logout());
+  showApp();
+  bindNav();
+  api('auth/me')
+    .then((u)=>{ currentUser=u; localStorage.setItem('user', JSON.stringify(currentUser)); applyPermissionGuards(); loadAll(); })
+    .catch(()=>logout());
+} else {
+  showLogin();
 }
