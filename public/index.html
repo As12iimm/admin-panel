@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Goodhope Admin Suite</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="loginView" class="login-shell">
+      <section class="login-card">
+        <div class="logo-line">GOODHOPE ENTERPRISES</div>
+        <h1>Admin Suite</h1>
+        <p>Secure portal for Hajj & Umrah operations</p>
+        <label>Email</label><input id="email" placeholder="admin@flygoodhope.com" />
+        <label>Password</label><input id="password" type="password" placeholder="••••••••" />
+        <button class="btn primary" onclick="login()">Sign In</button>
+        <button class="btn ghost" onclick="requestPasswordReset()">Forgot password</button>
+        <p id="loginMsg" class="error"></p>
+      </section>
+    </div>
+
+    <div id="mfaView" class="login-shell hidden">
+      <section class="login-card">
+        <div class="logo-line">MFA VERIFICATION</div>
+        <h1>Two-Factor Authentication</h1>
+        <p id="mfaHint">Enter the 6-digit OTP code.</p>
+        <label>OTP Code</label><input id="mfaCode" placeholder="123456" />
+        <button class="btn primary" onclick="verifyMfa()">Verify OTP</button>
+        <p id="mfaMsg" class="error"></p>
+      </section>
+    </div>
+
+    <div id="appView" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="brand">Goodhope Admin</div>
+        <button class="nav active" data-page="dashboard">Dashboard</button>
+        <button class="nav" data-page="crm">Pilgrim CRM</button>
+        <button class="nav" data-page="leads">Leads Kanban</button>
+        <button class="nav" data-page="packages">Packages</button>
+        <button class="nav" data-page="bookings">Bookings</button>
+        <button class="nav" data-page="finance">Finance</button>
+        <button class="nav" data-page="phase2">Medical & Compliance</button>
+        <button class="nav" data-page="security">Security / Audit</button>
+        <button class="btn ghost" onclick="logout()">Logout</button>
+      </aside>
+
+      <main class="content">
+        <header class="topbar"><div><h2 id="pageTitle">Dashboard</h2><p id="welcomeLine">Welcome</p></div></header>
+        <section id="dashboard" class="page"><div id="stats" class="stats-grid"></div></section>
+
+        <section id="crm" class="page hidden">
+          <h3>Pilgrim CRM</h3>
+          <div class="form-row"><input id="pilgrimName" placeholder="Full name" /><input id="pilgrimPassport" placeholder="Passport no" /><input id="pilgrimFamily" placeholder="Family Group ID" /><button class="btn primary" onclick="addPilgrim()">Add Pilgrim</button></div>
+          <div class="tab-grid"><div><h4>Pilgrims</h4><div id="pilgrimsList" class="table"></div></div><div><h4>Timeline Note</h4><div class="form-row"><input id="notePilgrimId" placeholder="Pilgrim ID" /><input id="noteText" placeholder="Activity note" /><button class="btn primary" onclick="addTimelineNote()">Add Note</button></div><div id="notesList" class="table"></div></div></div>
+          <h4>Travel History</h4><div class="form-row"><input id="travelPilgrimId" placeholder="Pilgrim ID" /><input id="travelPackage" placeholder="Package name" /><button class="btn primary" onclick="addTravelHistory()">Add Trip</button></div><div id="travelList" class="table"></div>
+          <h4>Document Upload (MongoDB)</h4><div class="form-row"><input id="docPilgrimId" placeholder="Pilgrim ID" /><input id="docName" placeholder="File name" /><select id="docCategory"><option>passport</option><option>visa</option><option>vaccine_certificate</option><option>other</option></select><input id="docFile" type="file" /><button class="btn primary" onclick="uploadPilgrimDocument()">Upload</button></div><div id="docsList" class="table"></div>
+        </section>
+
+        <section id="leads" class="page hidden">
+          <h3>Leads Pipeline (Kanban)</h3>
+          <div class="form-row"><input id="leadName" placeholder="Lead name" /><input id="leadPhone" placeholder="Phone" /><input id="leadSource" placeholder="Source" /><input id="leadCampaign" placeholder="Campaign" /><button class="btn primary" onclick="addLead()">Add Lead</button></div>
+          <div class="kanban" id="kanbanBoard"></div>
+          <h4>Follow-up Tasks / SLA</h4><div class="form-row"><input id="taskLeadId" placeholder="Lead ID" /><input id="taskTitle" placeholder="Task title" /><input id="taskDue" type="datetime-local" /><button class="btn primary" onclick="addLeadTask()">Add Task</button><button class="btn ghost" onclick="refreshOverdueTasks()">Recompute Overdue</button></div><div id="tasksList" class="table"></div>
+          <h4>Lead Analytics</h4><button class="btn ghost" onclick="loadLeadAnalytics()">Refresh Analytics</button><pre id="leadAnalytics" class="analytics"></pre>
+        </section>
+
+        <section id="packages" class="page hidden">
+          <h3>Packages</h3>
+          <div class="form-row"><input id="packageTitle" placeholder="Package title" /><select id="packageType"><option value="umrah">Umrah</option><option value="hajj">Hajj</option></select><input id="packageCapacity" type="number" placeholder="Capacity" /><input id="packagePrice" type="number" placeholder="Base price" /><button class="btn primary" onclick="addPackage()">Add Package</button></div>
+          <div id="packagesList" class="table"></div>
+        </section>
+
+        <section id="bookings" class="page hidden">
+          <h3>Booking Operations</h3>
+          <div class="form-row"><input id="bookingPilgrimId" placeholder="Pilgrim ID" /><input id="bookingPackageId" placeholder="Package ID" /><select id="bookingRoom"><option>quad</option><option>triple</option><option>double</option><option>single</option></select><input id="bookingRoomAlloc" placeholder="Room allocation" /><input id="bookingAmount" type="number" placeholder="Total amount" /><button class="btn primary" onclick="createBooking()">Create Booking</button></div>
+          <div class="form-row"><input id="cancelBookingId" placeholder="Booking ID to cancel" /><input id="cancelReason" placeholder="Cancellation reason" /><button class="btn ghost" onclick="cancelBooking()">Cancel Booking</button></div>
+          <div id="bookingsList" class="table"></div>
+        </section>
+
+        <section id="finance" class="page hidden">
+          <h3>Accounts & Finance</h3>
+          <h4>Invoice Generation</h4>
+          <div class="form-row"><input id="invBookingId" placeholder="Booking ID" /><input id="invSubtotal" type="number" placeholder="Subtotal" /><input id="invTax" type="number" placeholder="Tax %" /><button class="btn primary" onclick="generateInvoice()">Generate Invoice</button></div>
+          <div class="form-row"><input id="approveInvoiceId" placeholder="Invoice ID" /><button class="btn ghost" onclick="approveInvoice()">Approve Invoice</button></div>
+          <div id="invoicesList" class="table"></div>
+          <h4>Installments</h4>
+          <div class="form-row"><input id="instInvoiceId" placeholder="Invoice ID" /><input id="instDue" type="date" /><input id="instAmount" type="number" placeholder="Amount" /><button class="btn primary" onclick="scheduleInstallment()">Add Installment</button></div>
+          <div id="installmentsList" class="table"></div>
+          <h4>Commissions</h4>
+          <div class="form-row"><input id="comBookingId" placeholder="Booking ID" /><input id="comAgentId" placeholder="Agent ID" /><input id="comRate" type="number" placeholder="Rate %" /><button class="btn primary" onclick="calcCommission()">Calculate</button></div>
+          <div class="form-row"><input id="approveComId" placeholder="Commission ID" /><button class="btn ghost" onclick="approveCommission()">Approve Commission</button></div>
+          <div id="commissionsList" class="table"></div>
+          <h4>Reconciliation</h4>
+          <button class="btn ghost" onclick="loadReconciliation()">Load Reconciliation</button><pre id="reconData" class="analytics"></pre>
+        </section>
+
+        <section id="phase2" class="page hidden">
+          <h3>Medical & Compliance Completion</h3>
+          <h4>Medical Clearance Workflow</h4>
+          <div class="form-row"><input id="medRecordId" placeholder="Medical Record ID" /><button class="btn primary" onclick="submitMedicalClearance()">Submit Clearance</button></div>
+          <div class="form-row"><input id="medReviewId" placeholder="Medical Record ID" /><select id="medStep"><option>nurse_review</option><option>doctor_review</option><option>chief_medical_approval</option></select><select id="medDecision"><option>approved</option><option>rejected</option></select><input id="medNote" placeholder="Note" /><button class="btn primary" onclick="reviewMedicalStep()">Review Step</button></div>
+          <h4>Compliance Rules & Checklist</h4>
+          <div class="form-row"><input id="ruleNation" placeholder="Nationality" /><select id="rulePackage"><option>umrah</option><option>hajj</option></select><input id="ruleDocs" placeholder="Docs comma separated" /><input id="ruleSla" type="number" placeholder="SLA days" /><button class="btn primary" onclick="createComplianceRule()">Create Rule</button></div>
+          <div class="form-row"><input id="checkPilgrimId" placeholder="Pilgrim ID" /><select id="checkPkg"><option>umrah</option><option>hajj</option></select><button class="btn ghost" onclick="generateChecklist()">Generate Checklist</button></div>
+          <h4>Visa Stage Workflow + SLA</h4>
+          <div class="form-row"><input id="visaPilgrimId" placeholder="Pilgrim ID" /><select id="visaStage"><option>draft</option><option>submitted</option><option>embassy_review</option><option>stamped</option><option>issued</option><option>rejected</option></select><input id="visaSla" type="number" placeholder="SLA days" /><button class="btn primary" onclick="moveVisaStage()">Update Visa Stage</button></div>
+          <h4>Reminder Jobs</h4>
+          <button class="btn ghost" onclick="runReminderJob()">Run Reminder Job</button><pre id="reminderResult" class="analytics"></pre>
+        </section>
+
+        <section id="security" class="page hidden"><h3>Security Audit Logs</h3><div id="auditList" class="table"></div></section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
