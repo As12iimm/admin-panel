@@ -6,16 +6,23 @@ const el = (id) => document.getElementById(id);
 
 function hasPermission(action) { return (currentUser?.permissions || []).includes(action); }
 
+function showToast(msg) { const t = el('toast'); if (!t) return; t.textContent = msg; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'), 2600); }
+function setLoading(on) { el('globalLoading')?.classList.toggle('hidden', !on); }
+function markInvalid(id, bad=true){ const n=el(id); if(!n) return; n.classList.toggle('input-error', bad); }
+
 async function api(path, method = 'GET', body, retry = true) {
+  setLoading(true);
   const res = await fetch(`/api/${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {})
   });
   if (res.status === 401 && retry && refreshToken) { const ok = await refreshAccessToken(); if (ok) return api(path, method, body, false); }
-  if (!res.ok) throw new Error(await res.text());
-  if (res.status === 204) return null;
-  return res.json();
+  if (!res.ok) { const e = await res.text(); setLoading(false); throw new Error(e); }
+  if (res.status === 204) { setLoading(false); return null; }
+  const data = await res.json();
+  setLoading(false);
+  return data;
 }
 
 async function refreshAccessToken() {
@@ -120,7 +127,7 @@ function row(cols){ return `<div class="row-item">${cols.map((c)=>`<div>${c ?? '
 function renderTable(id, rows){ const el=document.getElementById(id); if(el) el.innerHTML=rows.length?rows.join(''):'<div class="row-item"><div>No data</div><div>-</div><div>-</div><div>-</div></div>'; }
 
 function applyPermissionGuards() {
-  const map = { crm:'manage_pilgrims', leads:'manage_leads', packages:'manage_packages', bookings:'manage_bookings', finance:'manage_invoices', phase2:'manage_medical', security:'manage_security' };
+  const map = { crm:'manage_pilgrims', leads:'manage_leads', packages:'manage_packages', bookings:'manage_bookings', finance:'manage_invoices', phase2:'manage_medical', communications:'manage_communications', analytics:'view_analytics', security:'manage_security' };
   document.querySelectorAll('.nav[data-page]').forEach((btn)=>{ const action = map[btn.dataset.page] || 'view_dashboard'; btn.classList.toggle('hidden', !hasPermission(action)); });
 }
 
@@ -180,11 +187,40 @@ async function loadAll(){
   if(hasPermission('manage_packages')) jobs.push(loadPackages());
   if(hasPermission('manage_bookings')) jobs.push(loadBookings());
   if(hasPermission('manage_invoices')) jobs.push(loadInvoices(),loadInstallments(),loadCommissions(),loadReconciliation());
+  if(hasPermission('manage_communications')) jobs.push(loadTemplates(), loadMessageLogs());
+  if(hasPermission('view_analytics')) jobs.push(loadAdvancedAnalytics());
   if(hasPermission('manage_security')) jobs.push(loadAudit());
   await Promise.all(jobs);
 }
 
-function bindNav(){ const pages=[...document.querySelectorAll('.page')]; const navs=[...document.querySelectorAll('.nav[data-page]')]; navs.forEach((btn)=>{ btn.onclick=()=>{ navs.forEach(n=>n.classList.remove('active')); btn.classList.add('active'); pages.forEach(p=>p.classList.toggle('hidden', p.id!==btn.dataset.page)); const titleEl = el('pageTitle'); if (titleEl) titleEl.textContent=btn.textContent; }; }); }
+
+function toggleSidebar(){ document.querySelector('.sidebar')?.classList.toggle('open'); }
+
+// Communications
+async function createTemplate(){ if(!tplName.value.trim()||!tplBody.value.trim()){ markInvalid('tplName', !tplName.value.trim()); markInvalid('tplBody', !tplBody.value.trim()); showToast('Template name/body required'); return; } await api('message-templates','POST',{name:tplName.value.trim(),channel:tplChannel.value,triggerType:tplTrigger.value,body:tplBody.value.trim(),subject:tplName.value.trim()}); showToast('Template created'); await loadTemplates(); }
+async function loadTemplates(){ if(!hasPermission('manage_communications')) return; const d=await api('message-templates'); renderTable('templatesList', d.map((t)=>row([t._id,t.name,t.channel,t.triggerType]))); }
+async function sendMessage(){ if(!sendTarget.value.trim()){ markInvalid('sendTarget', true); showToast('Target required'); return; } await api('communications/send','POST',{templateId:sendTemplateId.value.trim()||undefined,channel:sendChannel.value,target:sendTarget.value.trim(),body:sendBody.value.trim(),context:{name:'Pilgrim'}}); showToast('Message sent'); await loadMessageLogs(); }
+async function loadMessageLogs(){ if(!hasPermission('manage_communications')) return; const d=await api('message-logs'); renderTable('messageLogsList', d.map((m)=>row([m._id,m.channel,m.target,m.status]))); }
+async function runCommunicationTriggers(){ const d=await api('communications/triggers/run','POST'); showToast(`Trigger job generated ${d.generated} messages`); await loadMessageLogs(); }
+
+// Advanced analytics
+async function loadAdvancedAnalytics(){
+  if(!hasPermission('view_analytics')) return;
+  const [funnel, occ, col, risk, cohort, forecast] = await Promise.all([
+    api('analytics/funnel'), api('analytics/occupancy'), api('analytics/collections'), api('analytics/risk'), api('reports/cohort-conversion'), api('reports/forecast/demand')
+  ]);
+  el('analyticsFunnel').textContent = JSON.stringify(funnel, null, 2);
+  el('analyticsOccupancy').textContent = JSON.stringify(occ, null, 2);
+  el('analyticsCollections').textContent = JSON.stringify(col, null, 2);
+  el('analyticsRisk').textContent = JSON.stringify(risk, null, 2);
+  el('analyticsCohort').textContent = JSON.stringify(cohort, null, 2);
+  el('analyticsForecast').textContent = JSON.stringify(forecast, null, 2);
+}
+async function exportInvoicesCsv(){ window.open('/api/export/invoices.csv', '_blank'); }
+async function exportInvoicesPdf(){ window.open('/api/export/invoices.pdf', '_blank'); }
+
+function bindNav(){ const pages=[...document.querySelectorAll('.page')]; const navs=[...document.querySelectorAll('.nav[data-page]')]; navs.forEach((btn)=>{ btn.onclick=()=>{ navs.forEach(n=>n.classList.remove('active')); btn.classList.add('active'); pages.forEach(p=>p.classList.toggle('hidden', p.id!==btn.dataset.page)); const titleEl = el('pageTitle'); if (titleEl) titleEl.textContent=btn.textContent;
+      document.querySelector('.sidebar')?.classList.remove('open'); }; }); }
 
 if (accessToken && refreshToken) {
   showApp(); bindNav(); api('auth/me').then((u)=>{ currentUser=u; localStorage.setItem('user', JSON.stringify(currentUser)); applyPermissionGuards(); loadAll(); }).catch(()=>logout());

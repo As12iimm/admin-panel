@@ -33,7 +33,7 @@
 
     <div id="appView" class="app-shell hidden">
       <aside class="sidebar">
-        <div class="brand">Goodhope Admin</div>
+        <div class="brand-row"><button class="btn ghost mobile-toggle" onclick="toggleSidebar()">☰</button><div class="brand">Goodhope Admin</div></div>
         <button class="nav active" data-page="dashboard">Dashboard</button>
         <button class="nav" data-page="crm">Pilgrim CRM</button>
         <button class="nav" data-page="leads">Leads Kanban</button>
@@ -41,6 +41,8 @@
         <button class="nav" data-page="bookings">Bookings</button>
         <button class="nav" data-page="finance">Finance</button>
         <button class="nav" data-page="phase2">Medical & Compliance</button>
+        <button class="nav" data-page="communications">Communications</button>
+        <button class="nav" data-page="analytics">Analytics</button>
         <button class="nav" data-page="security">Security / Audit</button>
         <button class="btn ghost" onclick="logout()">Logout</button>
       </aside>
@@ -109,9 +111,37 @@
           <button class="btn ghost" onclick="runReminderJob()">Run Reminder Job</button><pre id="reminderResult" class="analytics"></pre>
         </section>
 
+        
+        <section id="communications" class="page hidden">
+          <h3>Communication Automation</h3>
+          <h4>Templates</h4>
+          <div class="form-row"><input id="tplName" placeholder="Template name" /><select id="tplChannel"><option>email</option><option>sms</option><option>whatsapp</option></select><select id="tplTrigger"><option>due_reminder</option><option>doc_expiry</option><option>departure</option><option>visa_sla</option><option>custom</option></select><input id="tplBody" placeholder="Body e.g. Hello {{name}}" /><button class="btn primary" onclick="createTemplate()">Create Template</button></div>
+          <div id="templatesList" class="table"></div>
+          <h4>Send Message</h4>
+          <div class="form-row"><input id="sendTemplateId" placeholder="Template ID (optional)" /><select id="sendChannel"><option>email</option><option>sms</option><option>whatsapp</option></select><input id="sendTarget" placeholder="Target (email/phone)" /><input id="sendBody" placeholder="Custom body (if no template)" /><button class="btn primary" onclick="sendMessage()">Send</button></div>
+          <button class="btn ghost" onclick="runCommunicationTriggers()">Run Triggered Notifications</button>
+          <div id="messageLogsList" class="table"></div>
+        </section>
+
+        <section id="analytics" class="page hidden">
+          <h3>Analytics & Reporting</h3>
+          <div class="form-row"><button class="btn ghost" onclick="loadAdvancedAnalytics()">Refresh Dashboards</button><button class="btn ghost" onclick="exportInvoicesCsv()">Export Invoices CSV</button><button class="btn ghost" onclick="exportInvoicesPdf()">Export Invoices PDF</button></div>
+          <div class="tab-grid">
+            <div><h4>Funnel</h4><pre id="analyticsFunnel" class="analytics"></pre></div>
+            <div><h4>Occupancy</h4><pre id="analyticsOccupancy" class="analytics"></pre></div>
+            <div><h4>Collections</h4><pre id="analyticsCollections" class="analytics"></pre></div>
+            <div><h4>Risk Dashboard</h4><pre id="analyticsRisk" class="analytics"></pre></div>
+            <div><h4>Cohort Conversion</h4><pre id="analyticsCohort" class="analytics"></pre></div>
+            <div><h4>Demand Forecast</h4><pre id="analyticsForecast" class="analytics"></pre></div>
+          </div>
+        </section>
+
         <section id="security" class="page hidden"><h3>Security Audit Logs</h3><div id="auditList" class="table"></div></section>
       </main>
     </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <div id="globalLoading" class="loading hidden">Loading...</div>
 
     <script src="/app.js"></script>
   </body>

@@ -33,6 +33,8 @@ const MedicalRecord = require('./src/models/MedicalRecord');
 const ComplianceDocument = require('./src/models/ComplianceDocument');
 const ComplianceRule = require('./src/models/ComplianceRule');
 const Notification = require('./src/models/Notification');
+const MessageTemplate = require('./src/models/MessageTemplate');
+const MessageLog = require('./src/models/MessageLog');
 
 const app = express();
 app.use(helmet());
@@ -240,6 +242,8 @@ crudRoutes(MedicalRecord, 'medical-records', ACTIONS.MANAGE_MEDICAL, ['super_adm
 crudRoutes(ComplianceDocument, 'compliance-documents', ACTIONS.MANAGE_COMPLIANCE, ['super_admin', 'admin', 'operations', 'medical']);
 crudRoutes(ComplianceRule, 'compliance-rules', ACTIONS.MANAGE_COMPLIANCE, ['super_admin', 'admin', 'operations']);
 crudRoutes(Notification, 'notifications', ACTIONS.MANAGE_NOTIFICATIONS, ['super_admin', 'admin', 'operations', 'medical']);
+crudRoutes(MessageTemplate, 'message-templates', ACTIONS.MANAGE_COMMUNICATIONS, ['super_admin', 'admin', 'operations']);
+crudRoutes(MessageLog, 'message-logs', ACTIONS.MANAGE_COMMUNICATIONS, ['super_admin', 'admin', 'operations']);
 
 // Documents in MongoDB
 app.post('/api/pilgrim-documents/upload', authRequired, allowAction(ACTIONS.MANAGE_PILGRIM_DOCUMENTS), asyncHandler(async (req, res) => {
@@ -499,6 +503,146 @@ app.post('/api/jobs/reminders/run', authRequired, allowAction(ACTIONS.MANAGE_NOT
   if (notifications.length) await Notification.insertMany(notifications);
   const result = await Notification.updateMany({ status: 'pending' }, { $set: { status: 'sent', sentAt: new Date() } });
   res.json({ generated: notifications.length, sent: result.modifiedCount });
+}));
+
+
+// Communication automation
+function renderTemplate(template, context = {}) {
+  return String(template || '').replace(/{{\s*([\w.]+)\s*}}/g, (_, key) => String(context[key] ?? ''));
+}
+
+app.post('/api/communications/send', authRequired, allowAction(ACTIONS.MANAGE_COMMUNICATIONS), asyncHandler(async (req, res) => {
+  const { templateId, channel, target, context = {} } = req.body;
+  const template = templateId ? await MessageTemplate.findById(templateId) : null;
+  const finalChannel = template?.channel || channel || 'email';
+  const body = renderTemplate(template?.body || req.body.body || '', context);
+
+  const log = await MessageLog.create({
+    branchId: req.user.role === 'super_admin' ? req.body.branchId || 'default' : req.user.branchIds?.[0] || 'default',
+    channel: finalChannel,
+    templateId: template?._id,
+    target: target || context.email || context.phone || 'unknown',
+    payload: context,
+    status: 'queued'
+  });
+
+  // simulated provider send
+  log.status = 'sent';
+  log.sentAt = new Date();
+  log.providerMessageId = `MSG-${Date.now()}-${Math.floor(Math.random()*9999)}`;
+  await log.save();
+  await writeAudit(req, 'communication.send', 'message-log', log._id, { channel: finalChannel, target: log.target });
+  res.status(201).json(log);
+}));
+
+app.post('/api/communications/triggers/run', authRequired, allowAction(ACTIONS.MANAGE_COMMUNICATIONS), asyncHandler(async (req, res) => {
+  const now = new Date();
+  const soon = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+  const dueInstallments = await Installment.find({ status: { $in: ['pending', 'overdue'] }, dueDate: { $lte: soon } }).limit(200);
+  const expiringDocs = await ComplianceDocument.find({ expiryDate: { $lte: soon }, status: 'verified' }).limit(200);
+  const departing = await Booking.find({ status: 'confirmed', createdAt: { $lte: now } }).limit(200);
+
+  const templates = await MessageTemplate.find({ active: true });
+  const tByTrigger = Object.fromEntries(templates.map((t) => [t.triggerType, t]));
+
+  const logs = [];
+  for (const i of dueInstallments) {
+    const t = tByTrigger['due_reminder'];
+    if (!t) continue;
+    logs.push({ channel: t.channel, templateId: t._id, target: `invoice:${i.invoiceId}`, payload: { amount: i.amount, dueDate: i.dueDate }, status: 'sent', sentAt: new Date(), providerMessageId: `AUTO-${Date.now()}` });
+  }
+  for (const d of expiringDocs) {
+    const t = tByTrigger['doc_expiry'];
+    if (!t) continue;
+    logs.push({ channel: t.channel, templateId: t._id, target: `pilgrim:${d.pilgrimId}`, payload: { docType: d.docType, expiryDate: d.expiryDate }, status: 'sent', sentAt: new Date(), providerMessageId: `AUTO-${Date.now()}` });
+  }
+  for (const b of departing.slice(0, 50)) {
+    const t = tByTrigger['departure'];
+    if (!t) continue;
+    logs.push({ channel: t.channel, templateId: t._id, target: `booking:${b._id}`, payload: { bookingRef: b.bookingRef }, status: 'sent', sentAt: new Date(), providerMessageId: `AUTO-${Date.now()}` });
+  }
+
+  if (logs.length) {
+    const branchId = req.user.role === 'super_admin' ? req.body.branchId || 'default' : req.user.branchIds?.[0] || 'default';
+    await MessageLog.insertMany(logs.map((x) => ({ branchId, ...x })));
+  }
+  res.json({ generated: logs.length });
+}));
+
+// Advanced analytics/reporting
+app.get('/api/analytics/funnel', authRequired, allowAction(ACTIONS.VIEW_ANALYTICS), asyncHandler(async (req, res) => {
+  const scope = buildScopes(req, 'leads');
+  const rows = await Lead.aggregate([{ $match: scope }, { $group: { _id: '$status', count: { $sum: 1 } } }]);
+  res.json(rows);
+}));
+
+app.get('/api/analytics/occupancy', authRequired, allowAction(ACTIONS.VIEW_ANALYTICS), asyncHandler(async (req, res) => {
+  const rows = await Package.aggregate([
+    { $match: buildScopes(req, 'packages') },
+    { $project: { title: 1, capacity: 1, bookedSeats: 1, occupancy: { $cond: [{ $gt: ['$capacity', 0] }, { $multiply: [{ $divide: ['$bookedSeats', '$capacity'] }, 100] }, 0] } } }
+  ]);
+  res.json(rows);
+}));
+
+app.get('/api/analytics/collections', authRequired, allowAction(ACTIONS.VIEW_ANALYTICS), asyncHandler(async (req, res) => {
+  const scope = buildScopes(req, 'payments');
+  const rows = await Payment.aggregate([
+    { $match: scope },
+    { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } }, total: { $sum: '$amount' } } },
+    { $sort: { _id: 1 } }
+  ]);
+  res.json(rows);
+}));
+
+app.get('/api/analytics/risk', authRequired, allowAction(ACTIONS.VIEW_ANALYTICS), asyncHandler(async (req, res) => {
+  const scope = buildScopes(req);
+  const [medicalUnfit, visaRejected, overdueInstallments, docsRejected] = await Promise.all([
+    MedicalRecord.countDocuments({ ...scope, fitnessStatus: 'unfit' }),
+    Pilgrim.countDocuments({ ...scope, visaStage: 'rejected' }),
+    Installment.countDocuments({ ...scope, status: 'overdue' }),
+    ComplianceDocument.countDocuments({ ...scope, status: 'rejected' })
+  ]);
+  res.json({ medicalUnfit, visaRejected, overdueInstallments, docsRejected });
+}));
+
+app.get('/api/reports/cohort-conversion', authRequired, allowAction(ACTIONS.VIEW_ANALYTICS), asyncHandler(async (req, res) => {
+  const rows = await Lead.aggregate([
+    { $match: buildScopes(req, 'leads') },
+    { $group: { _id: { month: { $dateToString: { format: '%Y-%m', date: '$createdAt' } }, source: '$source' }, total: { $sum: 1 }, converted: { $sum: { $cond: [{ $eq: ['$status', 'converted'] }, 1, 0] } } } },
+    { $sort: { '_id.month': 1 } }
+  ]);
+  res.json(rows);
+}));
+
+app.get('/api/reports/forecast/demand', authRequired, allowAction(ACTIONS.VIEW_ANALYTICS), asyncHandler(async (req, res) => {
+  const rows = await Booking.aggregate([
+    { $match: { ...buildScopes(req, 'bookings'), status: { $in: ['pending', 'confirmed'] } } },
+    { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } }, demand: { $sum: 1 }, avgAmount: { $avg: '$totalAmount' } } },
+    { $sort: { _id: 1 } }
+  ]);
+  res.json(rows);
+}));
+
+app.get('/api/export/invoices.csv', authRequired, allowAction(ACTIONS.MANAGE_INVOICES), asyncHandler(async (req, res) => {
+  const rows = await Invoice.find(buildScopes(req, 'invoices')).sort({ createdAt: -1 }).limit(2000);
+  const csv = ['invoiceNo,bookingId,pilgrimId,subtotal,taxRate,taxAmount,total,status,approvedBy']
+    .concat(rows.map((r) => [r.invoiceNo, r.bookingId, r.pilgrimId, r.subtotal, r.taxRate, r.taxAmount, r.total, r.status, r.approvedBy].map((v) => `"${String(v || '').replaceAll('"', '""')}"`).join(',')))
+    .join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.send(csv);
+}));
+
+app.get('/api/export/invoices.pdf', authRequired, allowAction(ACTIONS.MANAGE_INVOICES), asyncHandler(async (req, res) => {
+  const rows = await Invoice.find(buildScopes(req, 'invoices')).sort({ createdAt: -1 }).limit(200);
+  const content = rows.map((r) => `Invoice ${r.invoiceNo}
+Total: ${r.total}
+Status: ${r.status}
+---`).join('\n');
+  const pseudoPdf = Buffer.from(content, 'utf-8');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="invoices-report.pdf"');
+  res.send(pseudoPdf);
 }));
 
 // Reports/exports + dashboard
