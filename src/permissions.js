@@ -1,0 +1,65 @@
+const ACTIONS = {
+  VIEW_DASHBOARD: 'view_dashboard',
+  MANAGE_PILGRIMS: 'manage_pilgrims',
+  MANAGE_PILGRIM_DOCUMENTS: 'manage_pilgrim_documents',
+  MANAGE_PILGRIM_TIMELINE: 'manage_pilgrim_timeline',
+  MANAGE_TRAVEL_HISTORY: 'manage_travel_history',
+  MANAGE_LEADS: 'manage_leads',
+  MANAGE_LEAD_TASKS: 'manage_lead_tasks',
+  VIEW_LEAD_ANALYTICS: 'view_lead_analytics',
+  MANAGE_PACKAGES: 'manage_packages',
+  MANAGE_BOOKINGS: 'manage_bookings',
+  MANAGE_PAYMENTS: 'manage_payments',
+  MANAGE_REFUNDS: 'manage_refunds',
+  MANAGE_INVOICES: 'manage_invoices',
+  MANAGE_INSTALLMENTS: 'manage_installments',
+  VIEW_FINANCE_REPORTS: 'view_finance_reports',
+  MANAGE_COMMISSIONS: 'manage_commissions',
+  MANAGE_MEDICAL: 'manage_medical',
+  MANAGE_COMPLIANCE: 'manage_compliance',
+  MANAGE_VISA_WORKFLOW: 'manage_visa_workflow',
+  MANAGE_NOTIFICATIONS: 'manage_notifications',
+  MANAGE_SECURITY: 'manage_security'
+};
+
+const all = Object.values(ACTIONS);
+
+const ROLE_PERMISSIONS = {
+  super_admin: all,
+  admin: all,
+  operations: [
+    ACTIONS.VIEW_DASHBOARD,
+    ACTIONS.MANAGE_PILGRIMS,
+    ACTIONS.MANAGE_PILGRIM_DOCUMENTS,
+    ACTIONS.MANAGE_PILGRIM_TIMELINE,
+    ACTIONS.MANAGE_TRAVEL_HISTORY,
+    ACTIONS.MANAGE_LEADS,
+    ACTIONS.MANAGE_LEAD_TASKS,
+    ACTIONS.VIEW_LEAD_ANALYTICS,
+    ACTIONS.MANAGE_PACKAGES,
+    ACTIONS.MANAGE_BOOKINGS,
+    ACTIONS.MANAGE_MEDICAL,
+    ACTIONS.MANAGE_COMPLIANCE,
+    ACTIONS.MANAGE_VISA_WORKFLOW,
+    ACTIONS.MANAGE_NOTIFICATIONS
+  ],
+  accounts: [
+    ACTIONS.VIEW_DASHBOARD,
+    ACTIONS.MANAGE_PAYMENTS,
+    ACTIONS.MANAGE_BOOKINGS,
+    ACTIONS.MANAGE_REFUNDS,
+    ACTIONS.MANAGE_INVOICES,
+    ACTIONS.MANAGE_INSTALLMENTS,
+    ACTIONS.VIEW_FINANCE_REPORTS,
+    ACTIONS.MANAGE_COMMISSIONS,
+    ACTIONS.VIEW_LEAD_ANALYTICS
+  ],
+  medical: [ACTIONS.VIEW_DASHBOARD, ACTIONS.MANAGE_MEDICAL, ACTIONS.MANAGE_COMPLIANCE, ACTIONS.MANAGE_NOTIFICATIONS],
+  agent: [ACTIONS.VIEW_DASHBOARD, ACTIONS.MANAGE_LEADS, ACTIONS.MANAGE_LEAD_TASKS]
+};
+
+function permissionsForRole(role) {
+  return ROLE_PERMISSIONS[role] || [];
+}
+
+module.exports = { ACTIONS, ROLE_PERMISSIONS, permissionsForRole };
