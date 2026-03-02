@@ -42,7 +42,11 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       "script-src": ["'self'", "'unsafe-inline'"],
+      "script-src-elem": ["'self'", "'unsafe-inline'"],
+      "script-src-attr": ["'unsafe-inline'"],
       "style-src": ["'self'", "'unsafe-inline'"],
+      "style-src-elem": ["'self'", "'unsafe-inline'"],
+      "style-src-attr": ["'unsafe-inline'"],
       "img-src": ["'self'", "data:", "blob:"],
       "connect-src": ["'self'"]
     }
